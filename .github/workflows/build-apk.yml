@@ -2,9 +2,9 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, allow-while-driving ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, allow-while-driving ]
   workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
