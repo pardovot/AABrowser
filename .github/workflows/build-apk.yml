@@ -5,87 +5,69 @@ on:
     branches: [ main, master, allow-while-driving ]
   pull_request:
     branches: [ main, master, allow-while-driving ]
-  workflow_dispatch:  # Allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
-        
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
     - name: Decode keystore
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_FILE }}
       if: env.KEYSTORE_BASE64 != ''
       run: |
         echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > release.keystore
-      
+        ls -la release.keystore
+        file release.keystore
+
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace
-      
+
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: AABrowser-Debug-APK
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 30
-        
+
     - name: Build Release APK
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_FILE }}
-        RELEASE_STORE_FILE: ../release.keystore
+        RELEASE_STORE_FILE: release.keystore
         RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       if: env.KEYSTORE_BASE64 != ''
       run: ./gradlew assembleRelease --stacktrace
-      
-    - name: Sign and Zipalign APK
+
+    - name: Verify Release APK signature
       if: hashFiles('app/build/outputs/apk/release/*.apk') != ''
       run: |
-        # Find the unsigned APK from Gradle output
-        UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*-unsigned.apk" -o -name "*-release-unsigned.apk" | head -n 1)
-        RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
-        
-        # Use whichever APK exists
-        APK_PATH="${UNSIGNED_APK:-$RELEASE_APK}"
-        
-        if [ -f "$APK_PATH" ]; then
-          echo "Processing APK: $APK_PATH"
-          
-          # Sign the APK
-          echo "Signing APK..."
-          $JAVA_HOME/bin/jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
-            -keystore release.keystore \
-            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.KEY_PASSWORD }}" \
-            "$APK_PATH" "${{ secrets.KEY_ALIAS }}"
-          
-          # Zipalign
-          echo "Zipaligning APK..."
-          ZIPALIGN_TOOL=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -n 1)
-          FINAL_APK="app/build/renamedApks/release/AABrowser-2.0.apk"
-          mkdir -p app/build/renamedApks/release
-          $ZIPALIGN_TOOL -f -v 4 "$APK_PATH" "$FINAL_APK"
-          
-          # Verify
-          echo "Verifying signature..."
-          $JAVA_HOME/bin/jarsigner -verify -verbose -certs "$FINAL_APK"
-          echo "Verifying zipalign..."
-          $ZIPALIGN_TOOL -c -v 4 "$FINAL_APK"
+        APK=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
+        if [ -z "$APK" ]; then
+          echo "ERROR: Gradle produced an unsigned APK — signingConfig did not apply."
+          find app/build/outputs/apk/release -name "*.apk"
+          exit 1
         fi
-      
+        echo "Gradle-signed APK: $APK"
+        APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -V | tail -n 1)
+        ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | sort -V | tail -n 1)
+        "$ZIPALIGN" -c -v 4 "$APK"
+        "$APKSIGNER" verify --verbose --print-certs "$APK"
+
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       if: hashFiles('app/build/renamedApks/release/*.apk') != ''
