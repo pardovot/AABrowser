@@ -35,13 +35,11 @@ jobs:
         retention-days: 30
         
     - name: Build Release APK (unsigned)
-      run: ./gradlew assembleRelease --stacktrace || echo "Release build failed (expected without signing keys)"
-      continue-on-error: true
+      run: ./gradlew assembleRelease --stacktrace
       
-    - name: Upload Release APK (if built)
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
-      if: success()
       with:
-        name: AABrowser-Release-APK
-        path: app/build/renamedApks/release/*.apk
+        name: AABrowser-Release-APK-Unsigned
+        path: app/build/outputs/apk/release/*.apk
         retention-days: 30
