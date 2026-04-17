@@ -51,6 +51,15 @@ jobs:
       if: env.KEYSTORE_BASE64 != ''
       run: ./gradlew assembleRelease --stacktrace
       
+    - name: Verify APK signature
+      if: hashFiles('app/build/renamedApks/release/*.apk') != ''
+      run: |
+        APK_PATH=$(find app/build/renamedApks/release -name "*.apk" | head -n 1)
+        if [ -f "$APK_PATH" ]; then
+          echo "Verifying signature of: $APK_PATH"
+          $JAVA_HOME/bin/jarsigner -verify -verbose -certs "$APK_PATH"
+        fi
+      
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       if: hashFiles('app/build/renamedApks/release/*.apk') != ''
