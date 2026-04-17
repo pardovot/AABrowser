@@ -62,6 +62,21 @@ jobs:
           echo "Checking zipalign status:"
           $ANDROID_HOME/build-tools/*/zipalign -c -v 4 "$APK_PATH" || echo "APK is not zipaligned!"
         fi
+        
+    - name: Zipalign APK
+      if: hashFiles('app/build/renamedApks/release/*.apk') != ''
+      run: |
+        APK_PATH=$(find app/build/renamedApks/release -name "*.apk" | head -n 1)
+        if [ -f "$APK_PATH" ]; then
+          echo "Zipaligning: $APK_PATH"
+          ZIPALIGN_TOOL=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -n 1)
+          TEMP_APK="${APK_PATH%.apk}-temp.apk"
+          mv "$APK_PATH" "$TEMP_APK"
+          $ZIPALIGN_TOOL -f -v 4 "$TEMP_APK" "$APK_PATH"
+          rm "$TEMP_APK"
+          echo "Zipalign complete. Verifying..."
+          $ZIPALIGN_TOOL -c -v 4 "$APK_PATH"
+        fi
       
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
