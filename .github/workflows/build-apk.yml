@@ -58,6 +58,9 @@ jobs:
         if [ -f "$APK_PATH" ]; then
           echo "Verifying signature of: $APK_PATH"
           $JAVA_HOME/bin/jarsigner -verify -verbose -certs "$APK_PATH"
+          echo ""
+          echo "Checking zipalign status:"
+          $ANDROID_HOME/build-tools/*/zipalign -c -v 4 "$APK_PATH" || echo "APK is not zipaligned!"
         fi
       
     - name: Upload Release APK
