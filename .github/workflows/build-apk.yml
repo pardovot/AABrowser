@@ -24,6 +24,11 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
+    - name: Decode keystore
+      if: ${{ secrets.KEYSTORE_FILE != '' }}
+      run: |
+        echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > release.keystore
+      
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace
       
@@ -34,13 +39,18 @@ jobs:
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 30
         
-    - name: Build Release APK (unsigned)
-      run: ./gradlew assembleRelease --stacktrace || echo "Release build failed (expected without signing keys)"
-      continue-on-error: true
+    - name: Build Release APK
+      if: ${{ secrets.KEYSTORE_FILE != '' }}
+      run: ./gradlew assembleRelease --stacktrace
+      env:
+        RELEASE_STORE_FILE: ../release.keystore
+        RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
       
-    - name: Upload Release APK (if built)
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
-      if: success()
+      if: ${{ secrets.KEYSTORE_FILE != '' }}
       with:
         name: AABrowser-Release-APK
         path: app/build/renamedApks/release/*.apk
