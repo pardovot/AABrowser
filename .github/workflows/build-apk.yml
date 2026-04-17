@@ -51,31 +51,39 @@ jobs:
       if: env.KEYSTORE_BASE64 != ''
       run: ./gradlew assembleRelease --stacktrace
       
-    - name: Verify APK signature
-      if: hashFiles('app/build/renamedApks/release/*.apk') != ''
+    - name: Sign and Zipalign APK
+      if: hashFiles('app/build/outputs/apk/release/*.apk') != ''
       run: |
-        APK_PATH=$(find app/build/renamedApks/release -name "*.apk" | head -n 1)
-        if [ -f "$APK_PATH" ]; then
-          echo "Verifying signature of: $APK_PATH"
-          $JAVA_HOME/bin/jarsigner -verify -verbose -certs "$APK_PATH"
-          echo ""
-          echo "Checking zipalign status:"
-          $ANDROID_HOME/build-tools/*/zipalign -c -v 4 "$APK_PATH" || echo "APK is not zipaligned!"
-        fi
+        # Find the unsigned APK from Gradle output
+        UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*-unsigned.apk" -o -name "*-release-unsigned.apk" | head -n 1)
+        RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
         
-    - name: Zipalign APK
-      if: hashFiles('app/build/renamedApks/release/*.apk') != ''
-      run: |
-        APK_PATH=$(find app/build/renamedApks/release -name "*.apk" | head -n 1)
+        # Use whichever APK exists
+        APK_PATH="${UNSIGNED_APK:-$RELEASE_APK}"
+        
         if [ -f "$APK_PATH" ]; then
-          echo "Zipaligning: $APK_PATH"
+          echo "Processing APK: $APK_PATH"
+          
+          # Sign the APK
+          echo "Signing APK..."
+          $JAVA_HOME/bin/jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore release.keystore \
+            -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
+            -keypass "${{ secrets.KEY_PASSWORD }}" \
+            "$APK_PATH" "${{ secrets.KEY_ALIAS }}"
+          
+          # Zipalign
+          echo "Zipaligning APK..."
           ZIPALIGN_TOOL=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -n 1)
-          TEMP_APK="${APK_PATH%.apk}-temp.apk"
-          mv "$APK_PATH" "$TEMP_APK"
-          $ZIPALIGN_TOOL -f -v 4 "$TEMP_APK" "$APK_PATH"
-          rm "$TEMP_APK"
-          echo "Zipalign complete. Verifying..."
-          $ZIPALIGN_TOOL -c -v 4 "$APK_PATH"
+          FINAL_APK="app/build/renamedApks/release/AABrowser-2.0.apk"
+          mkdir -p app/build/renamedApks/release
+          $ZIPALIGN_TOOL -f -v 4 "$APK_PATH" "$FINAL_APK"
+          
+          # Verify
+          echo "Verifying signature..."
+          $JAVA_HOME/bin/jarsigner -verify -verbose -certs "$FINAL_APK"
+          echo "Verifying zipalign..."
+          $ZIPALIGN_TOOL -c -v 4 "$FINAL_APK"
         fi
       
     - name: Upload Release APK
