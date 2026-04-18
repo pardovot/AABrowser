@@ -98,6 +98,14 @@
             android:exported="false"
             android:theme="@style/Theme.AABrowser" />
 
+        <service
+            android:name=".AABrowserMediaService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
